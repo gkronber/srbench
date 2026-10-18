@@ -1,0 +1,17 @@
+authors: # the participants
+  - Gabriel Kronberger
+email: gabriel.kronberger@heuristiclab.com
+name: NeoGP # name of the submission /method
+description: | # anything you'd like here to describe the method.
+  Tree-based genetic programming for symbolic regression in Julia.
+  NSGA2 with two objectives: negative log-likelihood and length.
+  Model and likelihood parameters are optimized (maximum likelihood)
+  before each fitness evalulation.
+  The model is the expression from the final Pareto front with the shortest 
+  description length. Independent runs of at most 100 generations are restarted 
+  until the time limit, and the model with the shortest description length of 
+  all runs is selected. 
+  Julia: https://github.com/heal-research/NeoGP.jl, Python bindings and scikit-learn
+  interface: https://github.com/heal-research/pyneogp
+
+url: https://github.com/heal-research/NeoGP.jl # a link to the project

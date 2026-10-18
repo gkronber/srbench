@@ -1,0 +1,14 @@
+channels:
+    - conda-forge
+dependencies:
+    - python=3.12
+    # juliacall runs Julia >= 1.12 (NeoGP.jl requires Julia 1.13) only from a Python
+    # that is linked with OpenSSL 3.5 or newer.
+    - openssl>=3.5
+    - numpy
+    - scikit-learn>=1.6
+    - sympy
+    - pip
+    - pip:
+        # pyneogp 0.2.0, which installs NeoGP.jl v0.1.1 (and Julia) through juliacall
+        - pyneogp[sklearn] @ git+https://github.com/heal-research/pyneogp@v0.2.0

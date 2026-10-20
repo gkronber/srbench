@@ -5,12 +5,15 @@ name: NeoGP # name of the submission /method
 description: | # anything you'd like here to describe the method.
   Tree-based genetic programming for symbolic regression in Julia.
   NSGA2 with two objectives: negative log-likelihood and length.
-  Model and likelihood parameters are optimized (maximum likelihood)
-  before each fitness evalulation.
-  The model is the expression from the final Pareto front with the shortest 
-  description length. Independent runs of at most 100 generations are restarted 
-  until the time limit, and the model with the shortest description length of 
-  all runs is selected. 
+  Terminals are variables, parameters and scaled variables; 
+  the operators are +, -, *, /, inv, exp, log, sqrt, sqr
+  and pow (not protected).
+  Model and likelihood parameters are optimized (maximum likelihood, Levenberg-Marquardt
+  with Broyden updates, at most 200 evaluations) before each fitness evaluation.
+  The model is the expression with the shortest description length from the
+  Pareto fronts of all generations. Independent runs of at most 100 generations
+  are restarted until the time limit, and the model with the shortest description
+  length of all runs is selected.
   Julia: https://github.com/heal-research/NeoGP.jl, Python bindings and scikit-learn
   interface: https://github.com/heal-research/pyneogp
 

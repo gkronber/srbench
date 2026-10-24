@@ -137,8 +137,9 @@ class NeoGPRestarts(RegressorMixin, BaseEstimator):
     Independent runs of NeoGPBestOfRun (NSGA2) with at most `generations` generations,
     restarted until the time limit `max_time` (seconds) or `max_restarts` runs.  The
     model is the expression with the lowest model-selection criterion (the description
-    length) of all runs.  Each parameter fit (Levenberg-Marquardt with Broyden updates)
-    is limited to `maxeval` evaluations.
+    length, with the parameter complexity `param_complexity`: "rot", "diag",
+    "rot_scaled" or "det") of all runs.  Each parameter fit (Levenberg-Marquardt with
+    Broyden updates) is limited to `maxeval` evaluations.
 
     A run is started only if the remaining time suffices for its initialization and
     one generation (estimated from the previous run); the last run stops at the time
@@ -146,9 +147,11 @@ class NeoGPRestarts(RegressorMixin, BaseEstimator):
 
     The tournament size grows with the population size if `tournamentsize` is None.
 
-    `precision` is "float32", "float64" or "auto": Float64 only if the magnitudes of the
-    inputs or the target are large or small, or Float32 would merge distinct values (see
-    `needs_float64`).
+    `objective` selects the two objectives of NSGA2 as in NeoGPRegressor: "nll"
+    (negative log-likelihood and length) or "dl" (the rounded negative log-likelihood
+    and the complexity penalty of the description length).  `precision` is "float32",
+    "float64" or "auto": Float64 only if the magnitudes of the inputs or the target are
+    large or small, or Float32 would merge distinct values (see `needs_float64`).
     """
 
     def __init__(
@@ -162,7 +165,9 @@ class NeoGPRestarts(RegressorMixin, BaseEstimator):
         maxeval=200,
         max_restarts=None,
         threads=0,
+        objective="nll",
         precision="auto",
+        param_complexity="rot",
     ):
         self.max_time = max_time
         self.random_state = random_state
@@ -173,7 +178,9 @@ class NeoGPRestarts(RegressorMixin, BaseEstimator):
         self.maxeval = maxeval
         self.max_restarts = max_restarts
         self.threads = threads
+        self.objective = objective
         self.precision = precision
+        self.param_complexity = param_complexity
 
     def fit(self, X, y):
         start = time.monotonic()
@@ -211,6 +218,8 @@ class NeoGPRestarts(RegressorMixin, BaseEstimator):
                 if self.random_state is None
                 else int(seeds.integers(2**31)),
                 threads=self.threads,
+                objective=self.objective,
+                param_complexity=self.param_complexity,
             ).fit(X, y)
             generation_time = (time.monotonic() - run_start) / (
                 run.nsga2_.generation + 1

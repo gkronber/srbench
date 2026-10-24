@@ -56,12 +56,16 @@ class NeoGPBestOfRun(NeoGPRegressor):
     """
     NeoGPRegressor (Gaussian likelihood) whose model is the expression with the lowest
     model-selection criterion of the Pareto fronts of all generations, not only of the
-    final front.  The data are Float64, so are the fits, the criterion and predictions.
+    final front.  Float32 data are kept (Float32 fits, criterion and predictions), any
+    other data are converted to Float64.
     """
 
     def fit(self, X, y):
         start = time.monotonic()
-        X, y = validate_data(self, X, y, y_numeric=True, dtype=np.float64)
+        X, y = validate_data(
+            self, X, y, y_numeric=True, dtype=(np.float64, np.float32)
+        )
+        self.dtype_ = X.dtype
         dataset = neogp.Dataset(X, y, None, None, self._varnames())
         lik = neogp.create_likelihood(self.likelihood, dataset)
         kwargs = dict(
@@ -97,8 +101,27 @@ class NeoGPBestOfRun(NeoGPRegressor):
         self.criterion_ = float(tracker.value)
         return self
 
+    def predict(self, X):
+        check_is_fitted(self, "best_")
+        X = validate_data(self, X, reset=False, dtype=self.dtype_)
+        return np.asarray(neogp.predict(self.best_, X))
+
     def _best(self):
         return self.best_
+
+
+def needs_float64(X, y, max_abs=1e6):
+    """True if Float32 does not suffice for the data: a value of `X` or `y` is outside
+    1/max_abs <= |v| <= max_abs (products and powers would leave the range of
+    Float32), or converting a column to Float32 merges distinct values."""
+    data = np.column_stack([np.asarray(X, dtype=np.float64), np.asarray(y, np.float64)])
+    a = np.abs(data[data != 0])
+    if a.size and (a.max() > max_abs or a.min() < 1 / max_abs):
+        return True
+    for c in data.T:
+        if len(np.unique(c.astype(np.float32))) < len(np.unique(c)):
+            return True
+    return False
 
 
 def tournament_size(popsize):
@@ -122,6 +145,10 @@ class NeoGPRestarts(RegressorMixin, BaseEstimator):
     limit.  The runs are seeded from `random_state`.
 
     The tournament size grows with the population size if `tournamentsize` is None.
+
+    `precision` is "float32", "float64" or "auto": Float64 only if the magnitudes of the
+    inputs or the target are large or small, or Float32 would merge distinct values (see
+    `needs_float64`).
     """
 
     def __init__(
@@ -135,6 +162,7 @@ class NeoGPRestarts(RegressorMixin, BaseEstimator):
         maxeval=200,
         max_restarts=None,
         threads=0,
+        precision="auto",
     ):
         self.max_time = max_time
         self.random_state = random_state
@@ -145,9 +173,19 @@ class NeoGPRestarts(RegressorMixin, BaseEstimator):
         self.maxeval = maxeval
         self.max_restarts = max_restarts
         self.threads = threads
+        self.precision = precision
 
     def fit(self, X, y):
         start = time.monotonic()
+        if self.precision == "auto":
+            self.dtype_ = np.float64 if needs_float64(X, y) else np.float32
+        elif self.precision in ("float32", "float64"):
+            self.dtype_ = np.dtype(self.precision).type
+        else:
+            raise ValueError(
+                f"precision must be auto, float32 or float64, got {self.precision!r}"
+            )
+        X, y = X.astype(self.dtype_), np.asarray(y).astype(self.dtype_)
         seeds = np.random.default_rng(self.random_state)
         tournamentsize = self.tournamentsize
         if tournamentsize is None:
@@ -186,7 +224,7 @@ class NeoGPRestarts(RegressorMixin, BaseEstimator):
 
     def predict(self, X):
         check_is_fitted(self, "best_estimator_")
-        return self.best_estimator_.predict(X)
+        return self.best_estimator_.predict(X.astype(self.dtype_))
 
 
 def model(est, X=None):

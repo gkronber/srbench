@@ -135,11 +135,14 @@ def tournament_size(popsize):
 class NeoGPRestarts(RegressorMixin, BaseEstimator):
     """
     Independent runs of NeoGPBestOfRun (NSGA2) with at most `generations` generations,
-    restarted until the time limit `max_time` (seconds) or `max_restarts` runs.  The
-    model is the expression with the lowest model-selection criterion (the description
-    length, with the parameter complexity `param_complexity`: "rot", "diag",
-    "rot_scaled" or "det") of all runs.  Each parameter fit (Levenberg-Marquardt with
-    Broyden updates) is limited to `maxeval` evaluations.
+    restarted until the time limit `max_time` (seconds), `max_restarts` runs, or until
+    `patience` consecutive runs did not improve the best description length by at least
+    `min_improvement` (patience=None disables this early stopping).  The model is the
+    expression with the lowest model-selection criterion (the description length, with
+    the parameter complexity `param_complexity`: "rot", "diag", "rot_scaled" or "det")
+    of all runs; a run with a lower criterion than the best is kept even if it does not
+    count as an improvement for early stopping.  Each parameter fit (Levenberg-Marquardt
+    with Broyden updates) is limited to `maxeval` evaluations.
 
     A run is started only if the remaining time suffices for its initialization and
     one generation (estimated from the previous run); the last run stops at the time
@@ -168,6 +171,8 @@ class NeoGPRestarts(RegressorMixin, BaseEstimator):
         objective="nll",
         precision="auto",
         param_complexity="rot",
+        patience=None,
+        min_improvement=0.5,
     ):
         self.max_time = max_time
         self.random_state = random_state
@@ -181,6 +186,8 @@ class NeoGPRestarts(RegressorMixin, BaseEstimator):
         self.objective = objective
         self.precision = precision
         self.param_complexity = param_complexity
+        self.patience = patience
+        self.min_improvement = min_improvement
 
     def fit(self, X, y):
         start = time.monotonic()
@@ -199,8 +206,14 @@ class NeoGPRestarts(RegressorMixin, BaseEstimator):
             tournamentsize = tournament_size(self.popsize)
         self.n_restarts_ = 0
         self.criterion_ = float("inf")
+        self.run_criteria_ = []  # criterion of the model of each run
+        self.run_ends_ = []  # seconds since the start of fit at the end of each run
+        reference = float("inf")  # best criterion at the last improvement
+        since_improvement = 0
         generation_time = 0.0  # of the previous run, initialization counts as one
         while self.max_restarts is None or self.n_restarts_ < self.max_restarts:
+            if self.patience is not None and since_improvement >= self.patience:
+                break
             remaining = None
             if self.max_time is not None:
                 remaining = self.max_time - (time.monotonic() - start)
@@ -225,10 +238,16 @@ class NeoGPRestarts(RegressorMixin, BaseEstimator):
                 run.nsga2_.generation + 1
             )
             self.n_restarts_ += 1
+            self.run_criteria_.append(run.criterion_)
+            self.run_ends_.append(time.monotonic() - start)
 
             if self.n_restarts_ == 1 or run.criterion_ < self.criterion_:
                 self.criterion_ = run.criterion_
                 self.best_estimator_ = run
+            if run.criterion_ <= reference - self.min_improvement:
+                reference, since_improvement = run.criterion_, 0
+            else:
+                since_improvement += 1
         return self
 
     def predict(self, X):
